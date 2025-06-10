@@ -41,12 +41,9 @@
 #include "fieldsel.h"
 #include "details.h"
 #include "prefs.h"
-#include "command.h"
 
 #define FUNC_START
 #define FUNC_END
-
-class CommandDialog;
 
 class Qps : public QWidget
 {
@@ -176,16 +173,13 @@ class Qps : public QWidget
 
   public slots:
     void clicked_trayicon(QSystemTrayIcon::ActivationReason);
-    void clicked_trayicon();
     void sig_term();
     void sig_hup();
     void sig_stop();
     void sig_cont();
     void sig_kill();
     void signal_menu(QAction *);
-    void run_command(QAction *);
     void about();
-    void license();
     void menu_update();
     void menu_toggle_path();
     void menu_toggle_infobar();
@@ -201,9 +195,7 @@ class Qps : public QWidget
     void menu_dynasty();
     void menu_custom();
     void menu_remove_field();
-    void menu_edit_cmd();
     void mig_menu(int id); // MOSIX only
-    void make_command_menu();
     void view_menu(QAction *);
     void save_quit();
     void add_fields_menu(QAction *act);
@@ -221,6 +213,7 @@ class Qps : public QWidget
 
     void update_timer();
     void refresh();
+    void showWindow();
     void test_popup(const QUrl &link);
     void update_menu_status();
 
@@ -265,7 +258,7 @@ class Qps : public QWidget
     QMenu *m_field; // Field Menu
     QMenu *m_view;  // Field Menu
     QAction *am_view;
-    QMenu *m_command;
+    QMenu *m_session;
     QMenu *m_options;
     QMenu *m_popup;
     QMenu *m_headpopup;
@@ -278,7 +271,6 @@ class Qps : public QWidget
     ControlBar *ctrlbar;
     FieldSelect *field_win;
     Preferences *prefs_win;
-    CommandDialog *command_win;
 
     QList<Details> details;
 
@@ -299,6 +291,9 @@ class Qps : public QWidget
     int context_col;       // where heading context menu was clicked
 
     QPoint winPos;
+    bool explicit_quit;
+
+    bool under_wayland;
 };
 
 #endif // QPS_H

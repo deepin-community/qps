@@ -70,16 +70,16 @@ QtTableView::QtTableView(QWidget *parent, const char* /*name*/)
     QScrollBar *sb = verticalScrollBar();
     if (sb)
     {
-        connect(sb, SIGNAL(valueChanged(int)), SLOT(verSbValue(int)));
-        connect(sb, SIGNAL(sliderMoved(int)), SLOT(verSbSliding(int)));
-        connect(sb, SIGNAL(sliderReleased()), SLOT(verSbSlidingDone()));
+        connect(sb, &QAbstractSlider::valueChanged, this, &QtTableView::verSbValue);
+        connect(sb, &QAbstractSlider::sliderMoved, this, &QtTableView::verSbSliding);
+        connect(sb, &QAbstractSlider::sliderReleased, this, &QtTableView::verSbSlidingDone);
     }
     sb = horizontalScrollBar();
     if (sb)
     {
-        connect(sb, SIGNAL(valueChanged(int)), SLOT(horSbValue(int)));
-        connect(sb, SIGNAL(sliderMoved(int)), SLOT(horSbSliding(int)));
-        connect(sb, SIGNAL(sliderReleased()), SLOT(horSbSlidingDone()));
+        connect(sb, &QAbstractSlider::valueChanged, this, &QtTableView::horSbValue);
+        connect(sb, &QAbstractSlider::sliderMoved, this, &QtTableView::horSbSliding);
+        connect(sb, &QAbstractSlider::sliderReleased, this, &QtTableView::horSbSlidingDone);
     }
 }
 /*
@@ -873,7 +873,7 @@ void QtTableView::repaintCell(int row, int col, bool /*usecache*/) // false
         return;
 
     QRect uR = QRect(xPos, yPos, cellWidth(col), cellHeight(row));
-    view->repaint(uR.intersected(viewRect())); // slow
+    view->update(uR.intersected(viewRect()));
 }
 
 // using
@@ -1038,13 +1038,13 @@ void QtTableView::repaintChanged() // only fullpainting
         QRect r = viewR;
         r.setLeft(xPos);
         r.setBottom(yPos < maxY ? yPos : maxY);
-        view->repaint(r.intersected(updateR));
+        view->update(r.intersected(updateR));
     }
     if (yPos <= maxY)
     {
         QRect r = viewR;
         r.setTop(yPos);
-        view->repaint(r.intersected(updateR)); // why? CPU +2~3% -> rect.unite()
+        view->update(r.intersected(updateR)); // why? CPU +2~3% -> rect.unite()
     }
 }
 

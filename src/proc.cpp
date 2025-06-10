@@ -51,8 +51,6 @@
 
 #include <sys/time.h>
 #include <sys/utsname.h> // uname()
-//#include <sys/param.h>	//HZ defined, no more used.
-//#include "misc.h"			// x_atoi() , userName() ,groupname()
 
 #include "proc.h"
 #include "uidstr.h"
@@ -60,22 +58,14 @@
 #include "wchan.h"
 
 #include <QString>
+#include <QRegularExpression>
 
 #include "details.h"
 
-// for Non-ASCII locale
-//#include <global.h>
-
-//#include <qtextcodec.h>
-// extern QTextCodec * codec ;
-//#define UniString(str)   codec->toUnicode(str)
-
 #define PROCDIR "/proc" // hmmm
 
-extern int flag_thread_ok;
-extern bool flag_schedstat;
+extern bool flag_thread_ok;
 extern bool flag_show_thread;
-extern bool flag_devel;
 
 int flag_24_ok; // we presume a kernel 2.4.x
 
@@ -96,27 +86,6 @@ enum
     SSCONNECTED,    /* connected to socket		*/
     SSDISCONNECTING /* in process of disconnecting	*/
 };
-
-#define QPS_SCHED_AFFINITY ok
-
-#ifdef QPS_SCHED_AFFINITY
-#ifndef SYS_sched_setaffinity
-#define SYS_sched_setaffinity 241
-#endif
-#ifndef SYS_sched_getaffinity
-#define SYS_sched_getaffinity 242
-#endif
-
-// Needed for some glibc
-int qps_sched_setaffinity(pid_t pid, unsigned int len, unsigned long *mask)
-{
-    return syscall(SYS_sched_setaffinity, pid, len, mask);
-};
-int qps_sched_getaffinity(pid_t pid, unsigned int len, unsigned long *mask)
-{
-    return syscall(SYS_sched_getaffinity, pid, len, mask);
-};
-#endif
 
 /*
    Thread Problems.
@@ -186,6 +155,7 @@ char *read_proc_file(const char *fname, int pid = -1, int tgid = -1,
     if (fd < 0)
         return nullptr;
     r = read(fd, buffer_proc, sizeof(buffer_proc) - 1); // return 0 , -1 ,
+    close(fd);
     if (r < 0)
         return nullptr;
 
@@ -227,6 +197,7 @@ char *read_proc_file2(char *r_path, const char *fname, int *size = nullptr)
         return nullptr;
     r = read(fd, buffer_proc,
              sizeof(buffer_proc) - 1); // return 0 , -1 , read_count
+    close(fd);
     if (r < 0)
         return nullptr;
 
@@ -237,7 +208,6 @@ char *read_proc_file2(char *r_path, const char *fname, int *size = nullptr)
         *size = r;
 
     buffer_proc[r] = 0; // safer
-    close(fd);
 
     return buffer_proc;
     // note: not work  fgets(sbuf, sizeof(64), fp) why???
@@ -287,14 +257,7 @@ bool proc_pid_fd(const int pid)
         if (len > 0)
         {
             fname[len] = 0;
-            // printf("DEBUG: %s[%s]\n",path,fname);
-            // if (strcmp(fname,"/dev/null")==0 ) continue;
         }
-
-        /// num_opened_files++;
-        // strcpy(p, e->d_name);
-        // fdnum = atoi(p);
-        // read_fd(fdnum, path);
     }
     closedir(d);
     return true;
@@ -640,26 +603,7 @@ bool Procview::accept_proc(Procinfo *p)
 
     result = true;
 
-    // BAD
-    if (false and viewproc == NETWORK)
-    {
-        /*
-        p->read_fds();
-        if(p->sock_inodes.size()==0)
-                result=false;
-        for(int i=0;i<p->sock_inodes.size();i++)
-        {
-                SockInode *sn=p->sock_inodes[i];
-                Sockinfo *si=Procinfo::socks.value(sn->inode,NULL);
-                if(si)
-                {
-                        si->pid=p->pid;
-                        linear_socks.append(si);
-                }
-        }
-        */
-    }
-    else if (viewproc == ALL)
+    if (viewproc == ALL)
         result = true;
     else if (viewproc == OWNED)
         result = (p->uid == my_uid);
@@ -667,21 +611,6 @@ bool Procview::accept_proc(Procinfo *p)
         result = (p->uid != 0);
     else if (viewproc == RUNNING)
         result = strchr("ORDW", p->state) != nullptr;
-
-    /*
-    if ( viewproc == HIDDEN)
-    {
-            result=false;
-            for(int j=0;j<hidden_process.size();j++)
-                    if(hidden_process[j]==p->command)
-                            result=true ;
-    }
-    else
-    {
-            for(int j=0;j<hidden_process.size();j++)
-                    if(hidden_process[j]==p->command)
-                            result=false;
-    } */
 
     if (result == false)
         return false; // dont go further !! for better speed
@@ -717,16 +646,8 @@ extern "C" {
 typedef int (*compare_func)(const void *, const void *);
 }
 
-/*
-template<class T>
-void Svec<T>::sort(int (*compare)(const T *a, const T *b))
-{
-    qsort(vect, used, sizeof(T), (compare_func)compare);
-}
-*/
-
 // table view - sort
-void Procview::linearize_tree(QVector<Procinfo *> *ps, int level, int prow,
+void Procview::linearize_tree(QList<Procinfo *> *ps, int level, int prow,
                               bool hide)
 {
     static_sortcat = sortcat;
@@ -859,6 +780,7 @@ void Procview::removeField(int field_id)
 void Procview::update_customfield()
 {
     customfields.clear();
+    customFieldIDs.clear();
 
     for (int i = 0; i < cats.size(); i++)
     {
@@ -1008,10 +930,9 @@ Category *Proc::cat_by_name( const QString &s )
         {
             i.next();
             const QString &p = i.value()->name;
-            int index = p.indexOf( QRegExp( "\\S" ) );
+            int index = p.indexOf( QRegularExpression( "\\S" ) );
             if ( p.indexOf( s, index ) == index )
                 return i.value();
-            //     cout << i.key() << ": " << i.value() << endl;
         }
     }
     return nullptr;
@@ -1028,8 +949,7 @@ int Proc::field_id_by_name(const QString &s)
         while (i != categories.end())
         {
             if ( i.value()->name == s )
-                return i.key(); // cout << i.key() << ": " <<
-                                // i.value() << endl;
+                return i.key();
             ++i;
         }
     }
@@ -1063,6 +983,7 @@ void Proc::commonPostInit()
     Proc::mem_total = 0;
     Proc::mem_free = 0;
 
+    Proc::mem_available = -1;
     Proc::mem_buffers = 0;
     Proc::mem_cached = 0;
 
@@ -1136,8 +1057,6 @@ void Procview::build_tree(Proclist &procs)
             parent = procs.value(virtual_parent_pid,
                                  NULL); // if pid not found, then return NULL.
 
-            //	printf("thread_leader=0 (%d)
-            //%s\n",p->tgid,p->command.ascii());
             if (treeview and parent and parent->accepted)
             {
                 // p->table_child_seq=parent->table_children.size();
@@ -1166,15 +1085,6 @@ void Procview::rebuild()
     linear_socks.clear();
 #endif
 
-    // Procinfo *pi = getProcinfoByPID(Procinfo::qps_pid);
-    // if(pi) Procinfo::loadQps=pi->pcpu;
-    //	printf("rebuild\n");
-
-    /* if(mprocs)
-    {
-            build_tree(*mprocs);
-    }
-    else */
     build_tree(Proc::procs);
 
     linearize_tree(&root_procs, 0, -1);
@@ -1207,8 +1117,6 @@ void Proc::refresh()
 
     Proc::read_loadavg();
     Proc::read_system(); // **** should be every refresh !!
-    // s->load_cpu=(float)Proc::dt_used/Proc::dt_total;  //after
-    // read_system();
 
     s->load_cpu = load_cpu; // after read_system();
     s->time = time(nullptr);   // save current time in seconds since epoch
@@ -1222,8 +1130,6 @@ void Proc::refresh()
 
     read_proc_all(); // Linux, Solaris...
 
-    // s->load_io=(float)(read_byte + write_byte ); // (50*1024*1024);
-    // //dt_total;
     if (io_byte != 0)
     {
         s->load_io = log10(io_byte) * 2; // 9000 -> 3point
@@ -1247,8 +1153,6 @@ void Proc::refresh()
         }
         else
         {
-            //	p->table_children.clear();  // for rebuild()
-            //	p->accepted=accept_proc(p);
             ++i;
         }
     }
@@ -1278,37 +1182,12 @@ void Procview::refresh()
 
 SysHistory::~SysHistory()
 {
-    for (const auto *p : qAsConst(procs))
+    for (const auto *p : std::as_const(procs))
     {
         delete p;
     }
     procs.clear(); // remove all (key,val)
 }
-
-/* check
-Category *Proc::cat_by_name(const char *s)
-{
-    if( s )
-    {
-        for( int i = 0; i < categories.size(); i++ )
-            if( strcmp(categories[i]->name, s) == 0 )
-                return categories[i];
-    }
-    return 0;
-}
-
-
-int  Proc::field_id_by_name(const char *s)
-{
-    if( s )
-    {
-        for( int i = 0; i < categories.size(); i++ )
-            if( strcmp(categories[i]->name, s) == 0 )
-                return i;
-    }
-    return -1;
-}
-*/
 
 // new process created
 Procinfo::Procinfo(Proc *system_proc, int process_id, int thread_id) : refcnt(1)
@@ -1338,7 +1217,7 @@ Procinfo::Procinfo(Proc *system_proc, int process_id, int thread_id) : refcnt(1)
     child_seq_prev = -1;
 
     lastchild = false;
-    generation = -1;
+    generation = 0;
     detail = nullptr;
 
     /// per_cpu_times = 0; not yet
@@ -1356,6 +1235,9 @@ Procinfo::Procinfo(Proc *system_proc, int process_id, int thread_id) : refcnt(1)
     io_write_prev = 0;
     io_read = 0;  // **
     io_write = 0; // **
+
+    io_read_KBps = 0;
+    io_write_KBps = 0;
 
     // tgid=0;
     pcpu = 0;
@@ -1381,12 +1263,8 @@ Procinfo::~Procinfo()
 {
     if (!clone)
     {
-        void watchdog_check_if_finish(QString cmd, Procinfo * p);
-        watchdog_check_if_finish(command, this);
-
         if (detail)
         {
-            //	printf("~Procinfo() : pid=%d\n",pid);
             detail->process_gone();
             detail = nullptr;
         }
@@ -1400,39 +1278,15 @@ Procinfo::~Procinfo()
         qDeleteAll(maps.begin(), maps.end());
         maps.clear();
 
-        //    if(environ)    delete environ;
         if (envblock)
             free(envblock); /// double free , SEGFAULT
     }
-
-    //	fd_files.squeeze();
-    //	maps.squeeze();
-    /*
-            if(maps) {
-                    maps->purge();
-                    delete maps;
-            }
-            if(fd_files) {
-                    fd_files->purge();
-                    delete fd_files;
-            }
-    */
-
-    //	if(children)
-    //	{	children->clear();	delete children; }
-    ///	delete[] per_cpu_times;
 }
 
 // miscellaneous static initializations
 void Proc::init_static()
 {
-
-    // socks.setAutoDelete(true);
-    /// usocks.setAutoDelete(true);
-
     pagesize = sysconf(_SC_PAGESIZE); // same getpagesize()  in <unistd.h>
-    //	printf("pagesize=%d, %d\n",getpagesize(),
-    // sysconf(_SC_PAGESIZE)); //4027
 }
 
 //  tricky function...(by fasthyun@magicn.com)
@@ -1586,7 +1440,6 @@ int Procinfo::readproc()
         username = userName(uid, euid);
         groupname = groupName(gid, egid);
 
-        int bug = 0;
         char cmdline_cmd[4096]; // some cmdline very large!  ex)chrome
         // read /proc/pid/cmdline
         int size;
@@ -1597,17 +1450,14 @@ int Procinfo::readproc()
             return -1;
         else
         {
-            // printf("DEBUG: size=%d \n",size);
             int cmdlen = strlen(buf);
 
             if (cmdlen == 0)
             {
                 // 1. kthread
-                // printf("Qps:debug no_cmdline pid=%d\n",pid );
                 cmdline = "";
             }
             // for non-ascii locale language
-            // cmdline = codec->toUnicode(cmdbuf,strlen(cmdbuf));
             else
             {
 
@@ -1632,86 +1482,42 @@ int Procinfo::readproc()
         //
         if (command.size() == 15)
         {
-            // only root & owner can read [exe] link
-            /*
-                    if((buf= read_proc_file2(path,"exe")) !=0 )
-                    {
-                            // printf("Qps:debug %s\n",buf );
-                            if(strlen(basename(buf))>15 and
-                                    strncmp(qPrintable(command),basename(buf),15)==0
-               )
-                                    command=basename(buf); // no
-               memory leak !
-                            else  ;// just use command
-                            //printf("Qps:debug %s\n",buf );
-                    } */
+            // Use /proc/PID/cmdline, comm, status
+            // ex)
+            //     /usr/lib/chromium/chromium --option1
+            //     --option2
+            //     python /usr/lib/system-service-d
+            //	   pam: gdm-password
+            //	   hald-addon-input: Listing On /dev~
+            //
+            char *p;
+            p = strstr(cmdline_cmd, ": "); // cut the options !
+            if (p != nullptr)
+                *p = 0;
+            p = strchr(cmdline_cmd, ' '); // cut the options !
+            if (p != nullptr)
+                *p = 0;
 
-            if (true) // guess the full name of the command
+            // printf("Qps:debug %s\n",cmdline_cmd );
+            char *pstart = strstr(basename(cmdline_cmd), cmdbuf);
+            if (pstart != nullptr)
             {
-                // Use /proc/PID/cmdline, comm, status
-                // ex)
-                //     /usr/lib/chromium/chromium --option1
-                //     --option2
-                //     python /usr/lib/system-service-d
-                //	   pam: gdm-password
-                //	   hald-addon-input: Listing On /dev~
-                //
-                char *p;
-                p = strstr(cmdline_cmd, ": "); // cut the options !
-                if (p != nullptr)
-                    *p = 0;
-                p = strchr(cmdline_cmd, ' '); // cut the options !
-                if (p != nullptr)
-                    *p = 0;
-
-                // printf("Qps:debug %s\n",cmdline_cmd );
-                char *pstart = strstr(basename(cmdline_cmd), cmdbuf);
-                if (pstart != nullptr)
-                {
-                    command = pstart; // copy
-                                      /// printf("Qps:debug2
-                                      /// %s\n",basename(cmdline_cmd));
-                }
+                command = pstart; // copy
             }
         }
 
         if (isThread())
             cmdline = command + " (thread)";
 
-        if (flag_devel and bug)
-        {
-            // command.append("^");
-            cmdline += " ^ Qps: may be a wrong commandline ";
-        }
-
-        void watchdog_check_if_start(QString cmd, Procinfo * ps);
-        watchdog_check_if_start(command, this); // segfault possible.
-
         first_run = false;
     }
 
-    if (flag_schedstat == true)
-    {
-        // if no change then return.    twice faster !
-        // MAX_256 bytes check...?
-        // 2.6.9 upper only and some system no has
-        if ((sbuf = read_proc_file2(path, "schedstat")) == nullptr)
-            return -1;
-
-        if (hashcmp(sbuf))
-            return 1; // no change
-    }
     // read /proc/PID/stat
     if ((sbuf = read_proc_file2(path, "stat")) == nullptr)
         return -1;
 
-    if (flag_schedstat == false) // if no change then return.    twice faster !
-    {
-        if (hashcmp(sbuf))
-            return 1;
-    }
-
-    /// if (proc_pid_fd(pid)== true) ;  // bottleneck !!
+    if (hashcmp(sbuf))
+        return 1;
 
     /*
             Not all values from /proc/#/stat are interesting; the ones left
@@ -1780,11 +1586,6 @@ int Procinfo::readproc()
     starttime = proc->boot_time /* secs */ + (starttime / proc->clk_tick);
 
     tty = (dev_t)i_tty; // hmmm
-    // if(tty!=0)	printf("pid=%d tty =%d\n",pid,tty);
-
-    //	if(guest_utime>0 or cguest_utime>0)
-    //	printf("cmd [%s] guest_utime=%d cguest_utime
-    //=%d\n",qPrintable(command),guest_utime,cguest_utime);
 
     utime += stime; // we make no user/system time distinction
     cutime += cstime;
@@ -1799,10 +1600,6 @@ int Procinfo::readproc()
             // Qps exception:[3230,firefox] dcpu=-22 utime=39268
             // old_utime=39290 why
             // occur?
-            if (flag_devel)
-                printf("Qps :[%d,%s] dcpu=%d utime=%ld "
-                       "old_utime=%ld why occurs?\n",
-                       pid, qPrintable(command), dcpu, utime, old_utime);
             return 1;
         }
 
@@ -1818,16 +1615,6 @@ int Procinfo::readproc()
         // fasthyun@magicn.com
         // \n",Proc::dt_total);
 
-        if (flag_devel and pcpu > 100) // DEBUG CODE
-        {
-            printf("Qps pcpu error: %0.0f%% [%d,%s] dt_total=%ld "
-                   "dcpu=%d utime=%ld "
-                   "old_utime=%ld \n",
-                   pcpu, pid, qPrintable(command), proc->dt_total, dcpu, utime,
-                   old_utime);
-            pcpu = 99.99;
-        }
-
         const float a = Procview::avg_factor;
         wcpu = a * old_wcpu + (1 - a) * pcpu;
     }
@@ -1836,24 +1623,20 @@ int Procinfo::readproc()
     old_utime = utime; // ****
 
     // read /proc/%PID/statm  - memory usage
-    if (true)
-    {
-        if ((buf = read_proc_file2(path, "statm")) == nullptr)
-            return -1; // kernel 2.2 ?
-        sscanf(buf, "%lu %lu %lu %lu %lu %lu %lu", &size, &resident, &share,
-               &trs, &lrs, &drs, &dt);
-        size *= pagesize / 1024; // total memory in kByte
-        resident *= pagesize / 1024;
-        share *= pagesize / 1024; // share
-                                  //	trs		;	// text(code)
-                                  //	lrs		;	// zero : lib, awlays zero in
-        // Kernel 2.6
-        //	drs		;	// data: wrong in kernel 2.6
-        //	dt		;	// zero : in Kernel 2.6
-        mem = resident - share;
-        // pmem = 100.0 * resident / proc->mem_total;
-        pmem = 100.0 * mem / proc->mem_total;
-    }
+    if ((buf = read_proc_file2(path, "statm")) == nullptr)
+        return -1; // kernel 2.2 ?
+    sscanf(buf, "%lu %lu %lu %lu %lu %lu %lu", &size, &resident, &share,
+            &trs, &lrs, &drs, &dt);
+    size *= pagesize / 1024; // total memory in kByte
+    resident *= pagesize / 1024;
+    share *= pagesize / 1024; // share
+                                //	trs		;	// text(code)
+                                //	lrs		;	// zero : lib, awlays zero in
+    // Kernel 2.6
+    //	drs		;	// data: wrong in kernel 2.6
+    //	dt		;	// zero : in Kernel 2.6
+    mem = resident - share;
+    pmem = 100.0 * resident / proc->mem_total;
 
     // read /proc/PID/status check !!
     if ((buf = read_proc_file2(path, "status")) == nullptr)
@@ -1916,11 +1699,7 @@ int Procinfo::readproc()
 
         io_read_prev = io_read;
         io_write_prev = io_write;
-
-        // io_read>>=10; //  divide by 1024
-        // io_write>>=10; //  divide by 1024
     }
-    // per_cpu_times = 0; // not yet
 
     if ((buf = read_proc_file2(path, "wchan")) != nullptr)
     {
@@ -1961,7 +1740,6 @@ int Proc::countCpu()
     int num_cpus = 0, n;
     // read system status  /proc/stat
     strcpy(path, "/proc/stat");
-    // if((buf= read_proc_file("stat:)) ==0 ) return -1;
     if ((n = read_file(path, buf, sizeof(buf) - 1)) <= 0)
     {
         printf("Qps Error: /proc/stat can't be read ! check it and "
@@ -2015,13 +1793,6 @@ int Proc::read_system() //
         else
             flag_thread_ok = false;
 
-        /* check schedstat  */
-        strcpy(path, "/proc/1/schedstat"); // some system doesn't have
-        if (!stat(path, (struct stat *)buf))
-            flag_schedstat = true;
-        else
-            flag_schedstat = false;
-
         strcpy(path, "/proc/stat");
         if ((n = read_file(path, buf, sizeof(buf) - 1)) <= 0)
             return 0;
@@ -2036,7 +1807,6 @@ int Proc::read_system() //
         else
         {
             p += 6;
-            // sscanf(p, "%d", &Proc::boot_time); //???? why
             // segfault???
             sscanf(p, "%u", &boot_time);
         }
@@ -2053,8 +1823,6 @@ int Proc::read_system() //
                 cpu_times(cpu, i) = 0;
                 old_cpu_times(cpu, i) = 0;
             }
-
-        // first_run=false; // not yet , at the bottom of this function
     }
 
     // read system status  /proc/stat
@@ -2088,11 +1856,6 @@ int Proc::read_system() //
         // Hotplugging Detection : save total_cpu
         if (Proc::num_cpus != Proc::old_num_cpus)
         {
-            //	for(int i = 0; i < CPUTIMES; i++)
-            //		cpu_times(num_cpus, i) =
-            // cpu_times(Proc::old_num_cpus,
-            // i);
-
             Proc::old_num_cpus = Proc::num_cpus;
         }
     }
@@ -2135,11 +1898,6 @@ int Proc::read_system() //
     cpu_times(Proc::num_cpus, CPUTIME_SYSTEM) = system;
     cpu_times(Proc::num_cpus, CPUTIME_IDLE) = idle;
 
-    // DRAFT!
-    // num_cpus == total_cpu
-    //
-    // dt_total= user + system + nice + idle
-    // dt_used= user + system;
     Proc::dt_used =
         user - old_cpu_times(Proc::num_cpus,
                              CPUTIME_USER); // infobar uses this value
@@ -2150,14 +1908,6 @@ int Proc::read_system() //
 
     load_cpu = (float)Proc::dt_used / Proc::dt_total; // COMMON
 
-    if (first_run)
-    {
-        //	printf("\n==================== tooo fast
-        //=================================\n");
-        //	printf("DEBUG:dt_total=%d
-        // dt_used=%d\n",Proc::dt_total,Proc::dt_used);
-        //	return -1; // too early refresh again  !!
-    }
     if (Proc::dt_total == 0)
     {
         //?????
@@ -2216,6 +1966,8 @@ int Proc::read_system() //
         sscanf(p, "MemTotal: %d kB\n", &mem_total);
     if ((p = strstr(buf, "MemFree:")) != nullptr)
         sscanf(p, "MemFree: %d kB\n", &mem_free);
+    if ((p = strstr(buf, "MemAvailable:")) != nullptr)
+        sscanf(p, "MemAvailable: %d kB\n", &mem_available);
     if ((p = strstr(buf, "Buffers:")) != nullptr)
         sscanf(p, "Buffers: %d kB\n", &mem_buffers);
     if ((p = strstr(buf, "Cached:")) != nullptr)
@@ -2262,14 +2014,9 @@ double Procinfo::get_tms()
 
 unsigned long Procinfo::get_affcpu()
 {
-#ifdef QPS_SCHED_AFFINITY
-    if (qps_sched_getaffinity(pid, sizeof(unsigned long), &affcpu) == -1)
-        affcpu = (unsigned long)0;
-#else
     if (sched_getaffinity(pid, sizeof(unsigned long), (cpu_set_t *)&affcpu) ==
         -1)
         affcpu = (unsigned long)0;
-#endif
     return affcpu;
 }
 
@@ -2455,8 +2202,6 @@ bool Proc::read_socket_list(Sockinfo::proto_t proto, const char *filename)
         }
         else
             *psi = si;
-
-        // linear_socks.add(si);
     }
     fclose(f);
     return true;
@@ -3020,8 +2765,6 @@ void Proc::read_proc_all()
             int pid;
             Procinfo *pi = nullptr;
 
-            // inline int x_atoi(const char *sstr);
-            // pid=x_atoi(e->d_name);	//if(pid<100) continue;
             pid = atoi(e->d_name);
 
             pi = procs.value(pid, NULL);
@@ -3030,21 +2773,11 @@ void Proc::read_proc_all()
             {
                 pi = new Procinfo(this, pid);
                 procs.insert(pid, pi);
-                /*
-                        Procinfo *parent;
-                        parent =procs[pi->ppid];
-                        if(parent)
-                                parent->children->add(pi);
-                        printf("Qps : parent null
-                   pid[%d]\n",pi->pid);	}
-                */
             }
             int ret = pi->readproc();
             if (ret > 0)
             {
                 pi->generation = current_gen; // this process is alive
-                // printf(" [%s] %d
-                // %d\n",pi->command.toAscii().data(),pi->generation,current_gen);
 
                 if (flag_show_thread and flag_thread_ok)
                     read_pid_tasks(pid); // for threads
@@ -3056,11 +2789,6 @@ void Proc::read_proc_all()
                     p->clone = true;
                     hprocs->insert(pid, p);
                 }
-            }
-            else
-            {
-                // already gone.  /proc/PID dead!
-                // later remove this process ! not yet
             }
         }
     }

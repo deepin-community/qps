@@ -1,3 +1,55 @@
+2.10.0 / 2024-11-05
+===================
+ * Used `MemAvailable`.
+ * Made "%MEM" be RSS/total mem.
+ * Made the tooltip of the memory graph more human-readable.
+
+2.9.0 / 2024-04-17
+==================
+ * Ported to Qt6.
+
+2.8.0 / 2023-11-05
+==================
+ * Updated screenshots and added metadata file.
+ * Fixed an instance of assigning of -1 to unsigned int.
+ * Fixed all instances of non-closed file descriptors (to fix an issue that caused a blank list for some users).
+
+2.7.0 / 2023-04-15
+==================
+ * Specify the widget when showing its tooltip (on Wayland).
+ * Corrected info-bar tooltips.
+ * Made the (PNG) font of info-bar a little larger.
+ * Don't try to save position or raise window under Wayland.
+ * Got rid of c-style string functions.
+ * Removed the redundant method `overpaintCell`.
+ * Removed all codes related to the nonexistent "command menu".
+ * Avoided `QWidget::repaint()`.
+ * Code cleanup.
+
+2.6.0 / 2022-11-05
+==================
+ * Removed some redundant variables and classes.
+
+2.5.0 / 2022-04-15
+==================
+ * Updated `README.md`.
+ * Removed qtdbus and qtx11extra from cmake files.
+
+2.4.0 / 2021-11-04
+==================
+ * Bumped minimum required Qt version to 5.15.
+ * Replaced deprecated methods.
+ * Silenced some compilation warnings.
+ * Got rid of sched_getaffinity hack.
+ * Ensure that only one sort indicator exists.
+ * Removed a redundant function.
+ * Enhanced filtering.
+
+2.3.0 / 2021-04-15
+==================
+  * Fixed a crash when Qps is started minimized to tray.
+  * Dropped the obsolete method QProcess::start().
+
 2.2.0 / 2020-11-01
 ==================
   * Avoided compiler warnings.

@@ -1,8 +1,107 @@
-qps (2.2.0-1deepin0) unstable; urgency=medium
+qps (2.10.0-1) unstable; urgency=medium
 
-  * No source change upload against GCC 12.
+  * New upstream version 2.10.0.
+  * debian/copyright: added myself.
+  * build-deps on liblxqt-dev (>= 2.1.0~).
+  * build-deps on lxqt-build-tools (>= 2.1.0~).
 
- -- Tianyu Chen <sweetyfish@deepin.org>  Fri, 20 Sep 2024 12:16:37 +0800
+ -- Macy Lin <macy@debconf.org>  Wed, 04 Dec 2024 21:29:34 +0100
+
+qps (2.9.0-1) unstable; urgency=medium
+
+  * Migrate to unstable.
+  * Run wrap-and-sort.
+
+ -- Andrew Lee (李健秋) <ajqlee@debian.org>  Thu, 28 Nov 2024 21:16:09 +0100
+
+qps (2.9.0-1~exp1) experimental; urgency=medium
+
+  [ Severus Septimius ]
+  * New upstream release 2.9.0
+  * debian/control: bump Standards-Version to 4.7.0, no changes needed.
+  * debian/control: bump Qt version in Description
+  * debian/control: bump dep on libkf5windowsystem-dev ->
+    libkf6windowsystem-dev
+  * debian/control: bump dep on liblxqt1-dev -> liblxqt2-dev
+  * debian/control: remove dep on libqt5x11extras5-dev
+  * debian/control: bump dep on lxqt-build-tools (>= 2.0.0+really2.0.0~)
+  * debian/control: bump dep on qttools5-dev -> qt6-tools-dev
+  * debian/control: bump dep on qttools5-dev-tools -> qt6-tools-dev-tools
+
+  [ Andrew Lee (李健秋) ]
+  * Clean up of group membership after 2nd calls.
+  * debian/control: build-deps on liblxqt-dev (>= 2.0.0~).
+  * debian/copyright: update.
+  * debian/control: build-deps on libglib2.0-dev.
+  * debian/salsa-ci.yml: disable tests that not supported builds in
+    experimental.
+
+ -- Andrew Lee (李健秋) <ajqlee@debian.org>  Sun, 22 Sep 2024 11:12:48 +0200
+
+qps (2.8.0-1) unstable; urgency=medium
+
+  [ Andrew Lee (李健秋) ]
+  * New upstream version 2.8.0.
+  * debian/control: build-deps on liblxqt1-dev (>= 1.4.0~).
+
+  [ ChangZhuo Chen (陳昌倬) ]
+  * Update d/copyright.
+
+ -- Andrew Lee (李健秋) <ajqlee@debian.org>  Tue, 12 Dec 2023 11:42:40 +0100
+
+qps (2.7.0-1) unstable; urgency=medium
+
+  * New upstream version 2.7.0.
+  * debian/control: update team address.
+  * debian/control: build-deps on liblxqt1-dev (>= 1.3.0~).
+  * debian/control: build-deps on lxqt-build-tools (>= 0.13.0~).
+  * debian/copyright: update.
+  * debian/upstream/metadata: drop obsolete field Name.
+  * debian/upstream/metadata: correct the git Repository url as itʼs
+    different from Repository-Browse.
+  * debian/rules: fix blhc error by added ignore-line-regexp.
+
+ -- Andrew Lee (李健秋) <ajqlee@debian.org>  Thu, 07 Sep 2023 11:27:56 +0200
+
+qps (2.6.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Bump Standards-Version to 4.6.2:
+    * Add "Rules-Requires-Root: no" in d/control.
+  * Remove unnecessary -Wl,--as-needed in d/rules
+  * Update d/watch for GitHub.
+
+ -- ChangZhuo Chen (陳昌倬) <czchen@debian.org>  Thu, 05 Jan 2023 12:32:58 +0800
+
+qps (2.5.0-2) unstable; urgency=medium
+
+  * Merge to unstable.
+
+ -- ChangZhuo Chen (陳昌倬) <czchen@debian.org>  Sat, 19 Nov 2022 09:45:51 +0800
+
+qps (2.5.0-1) experimental; urgency=medium
+
+  [ Andrew Lee (李健秋) ]
+  * Add debian/salsa-ci.yml file.
+  * Update debian/upstream/signing-key.asc.
+  * New upstream version 2.4.0
+
+  [ suman rajan ]
+  * New upstream version 2.5.0
+  * debian/upstream/metadata: Fixed Repository-Browse field
+  * debian/control: Bumped version for liblxqt1-dev
+  * debian/salsa-ci.yml: Added release for experimental
+  * debian/copyright: Fix license inconsistencies
+
+ -- suman rajan <suman@cryptolab.net>  Sat, 16 Jul 2022 17:56:21 +0200
+
+qps (2.4.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Bumped Standards-Version to 4.6.0, no changes needed
+  * Update debian/copyright
+
+ -- S. 7 <severusseptimius7@gmail.com>  Thu, 25 Nov 2021 18:19:55 +0200
 
 qps (2.2.0-1) unstable; urgency=medium
 

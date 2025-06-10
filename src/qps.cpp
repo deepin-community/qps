@@ -60,10 +60,7 @@
 #include "qps.h"
 #include "qpsapp.h"
 #include "dialogs.h"
-#include "commanddialog.h"
-#include "commandutils.h"
 #include "watchcond.h"
-#include "watchdogdialog.h"
 #include "lookup.h"
 #include "misc.h"
 
@@ -91,22 +88,15 @@
 #include <QDialogButtonBox>
 #include <QClipboard>
 #include <QSettings>
-#include <QTextCodec>
 
 #include <iostream>
 
 /* --------------------- Global Variable START ---------------------- */
-QList<Command *> commands;
-
 bool previous_flag_show_thread_prev = false; // previous state
 bool flag_show_thread = false; // to see informations at the thread level
-int flag_thread_ok = true;     // we presume a kernel 2.6.x using NPTL
+bool flag_thread_ok = true;     // we presume a kernel 2.6.x using NPTL
 bool flag_start_mini = false; // Need for Xorg.Session
 bool flag_refresh = true;     // DEL
-bool flag_xcompmgr = false;   // DEL test.compiz..
-bool flag_devel = false;
-bool flag_schedstat = false;
-bool flag_smallscreen = false;
 bool flag_firstRun = true; // test
 
 Qps *qps;
@@ -114,17 +104,12 @@ Qps *qps;
 SearchBox *search_box = nullptr;
 TFrame *infobox = nullptr; // testing
 QFontComboBox *font_cb = nullptr;
-WatchdogDialog *watchdogDialog = nullptr;
-
-/// PDisplay *pdisplay;
 
 QList<Procview *> proclist;
 
 #include "trayicon.h"
 TrayIcon *trayicon = nullptr;
 
-// for Non-ASCII Languages (CJK:chinese,japanese,korean, arabic ...)
-QTextCodec *codec = nullptr;
 #define UniString(str) str // codec->toUnicode(str)
 /* ------------------------ END global variables -------------------------- */
 
@@ -172,35 +157,23 @@ Qps::Qps()
     timer_id = 0;
     field_win = nullptr;
     prefs_win = nullptr;
-    command_win = nullptr;
     default_icon = nullptr;
     default_icon_set = false;
+    explicit_quit = false;
+    under_wayland = QGuiApplication::platformName() == "wayland";
 
     setIconSize(24, 24); // Important!!
                          //	setMouseTracking(true); // no need?
-
-    if (flag_devel)
-    {
-        thread_main = thread(); // Test
-        std::cout << "qps thread = " << thread() << " qApp thread = "
-            << QApplication::instance()->thread() << std::endl;
-    }
-
-    // watchdogDialog = new WatchdogDialog; //Memory Leak
-
-    //	font_cb=new QFontComboBox(this); // preload
-    //	font_cb->setWritingSystem ( QFontDatabase::Latin );
-    // font_cb->hide();
 
     make_signal_popup_menu();
 
     // MOVETO Pstable !!
     m_headpopup = new QMenu( tr( "header_popup" ), this);
-    m_headpopup->addAction( tr( "Remove Field" ), this, SLOT(menu_remove_field()));
+    m_headpopup->addAction( tr( "Remove Field" ), this, &Qps::menu_remove_field);
     m_fields = new QMenu( tr( "Add Field" ), this);
     m_headpopup->addMenu(m_fields);
 
-    m_command = new QMenu( tr( "Command" ), this); // filled in later
+    m_session = new QMenu( tr( "Session" ), this);
 
     QAction *act;
 
@@ -211,7 +184,7 @@ Qps::Qps()
 
     QActionGroup* group = new QActionGroup (this);
 
-    m_field = new QMenu("Field", this);
+    m_field = new QMenu( tr( "Fields" ), this);
     act = m_field->addAction( tr( "Custom Fields" ) );
     act->setData(Procview::CUSTOM);
     act = m_field->addAction( tr( "Basic Fields " ) );
@@ -240,77 +213,62 @@ Qps::Qps()
     act = m_field->addAction( QIcon::fromTheme(QStringLiteral("edit-find-replace"))
                             , tr( "Select Custom Fields..." )
                             , this
-                            , SLOT(menu_custom()));
+                            , &Qps::menu_custom);
     act->setData(MENU_CUSTOM);
 
-    connect(m_field, SIGNAL(triggered(QAction *)), this,
-            SLOT(view_menu(QAction *)));
-    connect(m_field, SIGNAL(aboutToShow()), SLOT(update_menu_status()));
+    connect(m_field, &QMenu::triggered, this,
+            &Qps::view_menu);
+    connect(m_field, &QMenu::aboutToShow, this, &Qps::update_menu_status);
 
-    /// connect(m_view, SIGNAL(triggered(QAction *)),this,
-    /// SLOT(view_menu(QAction
-    /// *)));
-    /// connect(m_view, SIGNAL(aboutToShow ()), SLOT(update_menu_status()));
-
-    m_options = new QMenu( tr( "Option" ), this);
-    m_options->addAction( tr( "Update Period..." ), this, SLOT(menu_update()));
+    m_options = new QMenu( tr( "Options" ), this);
+    m_options->addAction( tr( "Update Period..." ), this, &Qps::menu_update);
     m_options->addSeparator();
     act = m_options->addAction("", /* MENU_PATH */ this,
-                               SLOT(menu_toggle_path()));
+                               &Qps::menu_toggle_path);
     act->setData(QVariant(MENU_PATH));
-    act = m_options->addAction("", this, SLOT(menu_toggle_infobar()));
+    act = m_options->addAction("", this, &Qps::menu_toggle_infobar);
     act->setData(QVariant(MENU_INFOBAR));
-    act = m_options->addAction("", this, SLOT(menu_toggle_ctrlbar()));
+    act = m_options->addAction("", this, &Qps::menu_toggle_ctrlbar);
     act->setData(QVariant(MENU_CTRLBAR));
     act = m_options->addAction( tr( "Show Status bar" )
                               , this
-                              ,SLOT(menu_toggle_statusbar()));
+                              ,&Qps::menu_toggle_statusbar);
     act->setData(QVariant(MENU_STATUS));
-    act = m_options->addAction("", this, SLOT(menu_toggle_cumul()));
+    act = m_options->addAction("", this, &Qps::menu_toggle_cumul);
     act->setData(QVariant(MENU_CUMUL));
 
     m_options->addSeparator();
     m_options->addAction( QIcon::fromTheme(QStringLiteral("preferences-system"))
                         , tr( "Preferences..." )
                         , this
-                        , SLOT(menu_prefs())); // MENU_PREFS
+                        , &Qps::menu_prefs); // MENU_PREFS
 
-    connect(m_options, SIGNAL(aboutToShow()), SLOT(update_menu_status()));
+    connect(m_options, &QMenu::aboutToShow, this, &Qps::update_menu_status);
 
     QMenu *m_help = new QMenu( tr( "Help" ), this);
-    // m_help->addAction("FAQ", this, SLOT(license()));
     m_help->addAction(QIcon::fromTheme("help-about"),  tr( "About" ), this,
-                      SLOT(about()));
+                      &Qps::about);
 
-    // menu = new QMenuBar(this);
     menubar = new QMenuBar;
-    menubar->addMenu(m_command);
-    // am_view=menubar->addMenu(m_view);
+    menubar->addMenu(m_session);
     menubar->addMenu(m_field);
     menubar->addMenu(m_options);
     menubar->addSeparator();
     menubar->addMenu(m_help);
 
     ctrlbar = new ControlBar(this);
-    // controlbar=ctrlbar;
 
-    connect(ctrlbar, SIGNAL(need_refresh()), SLOT(refresh()));
-    connect(ctrlbar, SIGNAL(viewChange(QAction *)),
-            SLOT(view_menu(QAction *))); //?????
+    connect(ctrlbar, &ControlBar::need_refresh, this, &Qps::refresh);
+    connect(ctrlbar, &ControlBar::viewChange, this,
+            &Qps::view_menu); //?????
 
     context_col = -1;
 
     procview = new Procview(); // refresh() only not rebuild()
-/// procview = new Procview("localhost"); // refresh() only not rebuild()
-/// procview->refresh(); // TODO
-/// proclist.append(procview);
-/// procview->start(); // thread start
 
     pstable = new Pstable(this, procview); // no refresh()
     PDisplay *display = new PDisplay(this);
     infobar = display->addSystem(procview);
-    //.	infobar = new Infobar(this,procview); // graph_bar
-    //	infobar = new Infobar(procview); // graph_bar
     statusBar = new StatusBar(this);
 
     if (!read_settings())
@@ -324,86 +282,52 @@ Qps::Qps()
     pstable->setReveseSort(procview->reversed);
 
     set_table_mode(procview->treeview); //  Pstable::refresh() occur
-    make_command_menu();                // after qpsrc reading
+
+    m_session->addAction(QIcon::fromTheme(QStringLiteral("application-exit"))
+                        , tr( "Quit" )
+                        , Qt::ALT | Qt::Key_Q
+                        , this
+                        , &Qps::save_quit);
 
     // misc. accelerators
-    (void) new QShortcut(Qt::CTRL + Qt::Key_Q, this, SLOT(save_quit()));
-    (void) new QShortcut(Qt::CTRL + Qt::Key_Space,
+    (void) new QShortcut(Qt::CTRL | Qt::Key_Q, this, SLOT(save_quit()));
+    (void) new QShortcut(Qt::CTRL | Qt::Key_Space,
                                   ctrlbar->pauseButton, SLOT(click()));
-    (void) new QShortcut(Qt::CTRL + Qt::Key_L, pstable, SLOT(repaintAll()));
+    (void) new QShortcut(Qt::CTRL | Qt::Key_L, pstable, SLOT(repaintAll()));
 
-    // MOVETO : pstable better? hmmm...
-    // where is leftClick?
-    connect(pstable, SIGNAL(doubleClicked(int)), SLOT(open_details(int)));
-    connect(pstable, SIGNAL(rightClicked(QPoint)), this,
-            SLOT(show_popup_menu(QPoint)));
-    connect(pstable->header(), SIGNAL(rightClicked(QPoint, int)), this,
-            SLOT(context_heading_menu(QPoint, int)));
-    //	connect(netable, SIGNAL(rightClicked(QPoint)), this,
-    // SLOT(context_row_menu(QPoint)));
+    connect(pstable, &HeadedTable::doubleClicked, this, &Qps::open_details );
+    connect(pstable, &HeadedTable::rightClicked, this,
+            &Qps::show_popup_menu);
+    connect(pstable->header(), &TableHead::rightClicked, this,
+            &Qps::context_heading_menu);
 
     selection_items_enabled = true; // ????
     update_load_time = 0;
-    //// update_menu_status();
 
     QVBoxLayout *vlayout = new QVBoxLayout;
-    vlayout->setMargin(0);
+    vlayout->setContentsMargins(0, 0, 0, 0);
     if (flag_useTabView)
         vlayout->setSpacing(0);
     else
         vlayout->setSpacing(1);
 
-    // vlayout->addWidget(menu);
     vlayout->setMenuBar(menubar);
     vlayout->addWidget(display);
-    // vlayout->addWidget( infobar);
     vlayout->addWidget(ctrlbar);
-
-    /// vlayout->addSpacing(5);
-
-    // if(flag_devel){
-    if (false)
-    {
-        if (false)
-        {
-            QSplitter *splitter = new QSplitter(Qt::Vertical);
-            QDockWidget *dock = new QDockWidget(tr("Detail"), this);
-            dock->setFeatures(QDockWidget::DockWidgetClosable);
-            // dock->setWidget();
-            // dock->setAllowedAreas(Qt::LeftDockWidgetArea |
-            // Qt::RightDockWidgetArea);
-            // customerList = new QListWidget(dock);
-            // vlayout->addStretch();
-            splitter->addWidget(pstable);
-            splitter->addWidget(dock);
-            vlayout->addWidget(splitter);
-            vlayout->addWidget(statusBar);
-            setLayout(vlayout);
-        }
-    }
 
     logbox = new QTextEdit(this);
     logbox->setReadOnly(true);
 
-    if (false) // if(flag_smallscreen==false)
-    {
-        //
-    }
-    else
-    {
-        vlayout->addWidget(pstable);
-        vlayout->addWidget(logbox);
-        logbox->hide();
-    }
+    vlayout->addWidget(pstable);
+    vlayout->addWidget(logbox);
+    logbox->hide();
 
     vlayout->addWidget(statusBar);
     setLayout(vlayout);
 
     infobox = new TFrame(this);
-    //	setAttribute(Qt::WA_ShowWithoutActivating);
     if (update_period != eternity)
         Qps::update_timer(); // startTimer(update_period);
-    ///	setFocusPolicy (Qt::WheelFocus);
 
     bar_visibility(); // need
 
@@ -462,19 +386,18 @@ QMenu *Qps::make_signal_popup_menu()
     // move to pstable?
     QAction *act; // show_popup_menu() callback
     m_popup = new QMenu( tr( "context popup" ), this);
-    m_popup->addAction( tr( "Renice..." ), this, SLOT(menu_renice()));
-    m_popup->addAction( tr( "Scheduling..." ), this, SLOT(menu_sched()));
+    m_popup->addAction( tr( "Renice..." ), this, &Qps::menu_renice);
+    m_popup->addAction( tr( "Scheduling..." ), this, &Qps::menu_sched);
     m_popup->addSeparator();
-    m_popup->addAction( tr( "Terminate" ), this, SLOT(sig_term()),
-                       Qt::Key_Delete); // better
-    m_popup->addAction( tr( "Hangup" ), this, SLOT(sig_hup()), Qt::ALT + Qt::Key_H);
-    m_popup->addAction( tr( "Kill" ), this, SLOT(sig_kill()), Qt::ALT + Qt::Key_K);
-    act = m_popup->addAction( tr( "Stop" ), this, SLOT(sig_stop()));
+    m_popup->addAction( tr( "Terminate" ), Qt::Key_Delete, this, &Qps::sig_term);
+    m_popup->addAction( tr( "Hangup" ), Qt::ALT | Qt::Key_H, this, &Qps::sig_hup);
+    m_popup->addAction( tr( "Kill" ), Qt::ALT | Qt::Key_K, this, &Qps::sig_kill);
+    act = m_popup->addAction( tr( "Stop" ), this, &Qps::sig_stop);
     act->setData(MENU_SIGSTOP);
-    act = m_popup->addAction( tr( "Continue" ), this, SLOT(sig_cont()));
+    act = m_popup->addAction( tr( "Continue" ), this, &Qps::sig_cont);
     act->setData(MENU_SIGCONT);
 
-    QMenu *m = new QMenu("Other Signals");
+    QMenu *m = new QMenu( tr( "Other Signals" ) );
     act = m->addAction( tr( "SIGINT (interrupt)" ) );
     act->setData(SIGINT);
     act = m->addAction( tr( "SIGCONT (continue)" ) );
@@ -508,11 +431,11 @@ QMenu *Qps::make_signal_popup_menu()
     act = m->addAction( tr( "SIGTTOU (tty output)" ) );
     act->setData(SIGTTOU);
 
-    connect(m, SIGNAL(triggered(QAction *)), SLOT(signal_menu(QAction *)));
+    connect(m, &QMenu::triggered, this, &Qps::signal_menu);
 
     m_popup->addMenu(m);
     m_popup->addSeparator();
-    m_popup->addAction( tr( "View Details" ), this, SLOT(Action_Detail()));
+    m_popup->addAction( tr( "View Details" ), this, &Qps::Action_Detail);
 
     return m;
 }
@@ -566,7 +489,7 @@ void Qps::bar_visibility()
 }
 
 void Qps::timerEvent(QTimerEvent */*e*/) { Qps::refresh(); }
-//
+
 // dialogs.cpp:    qps->update_timer();
 void Qps::update_timer()
 {
@@ -609,6 +532,22 @@ void Qps::refresh()
         update_icon(); // make icon for systray
 }
 
+void Qps::showWindow()
+{
+    // NOTE: If Qps is started minimized to the tray, the list of processes won't be refreshed
+    // until its window is shown. But the first showing calls HeadedTable::resizeEvent(), which
+    // checks the known processes to calculate the width of the last column. If a process was
+    // stopped before that moment, a crash will happen because the app tries to get its info.
+    // Therefore, the list should be refreshed before the first showing of the main window.
+    if (flag_refresh && flag_start_mini)
+    {
+        procview->refresh();
+        pstable->refresh();
+    }
+    showNormal();
+    flag_start_mini = false; // the window has been shown for the first time
+}
+
 void Qps::resizeEvent(QResizeEvent *e)
 {
     int w;
@@ -621,18 +560,6 @@ void Qps::resizeEvent(QResizeEvent *e)
     if (e->size().width() < w)
     {
         search_box->hide();
-    }
-
-    return;
-    if (e->size().width() < 639)
-    {
-        flag_smallscreen = true;
-        statusBar->hide();
-    }
-    else
-    {
-        flag_smallscreen = false;
-        statusBar->show();
     }
 }
 
@@ -648,28 +575,27 @@ void Qps::closeEvent(QCloseEvent *e)
     winPos.setX(geometry().x());
     winPos.setY(geometry().y());
 
-    if ((Qps::flag_exit == false) && trayicon->hasSysTray)
+    if (!explicit_quit && !Qps::flag_exit && trayicon->hasSysTray)
     {
         e->ignore(); // dont close window!
         hide();
         return;
     }
     e->accept();
-    save_quit();
+    if (!explicit_quit) // call save_quit() only if not called by it
+        save_quit();
 }
 
-// call by void Qps::make_command_menu()
-//			void signal_handler(int sig)
-void Qps::save_quit() // will be removed !
+void Qps::save_quit()
 {
-    close(); // if another window exists, then no exit. // occurs
-             // QCoseEvent!
+    explicit_quit = true;
+    close();
     save_settings();
-    qApp->quit(); // MACRO
+    qApp->quit();
 }
 
 // NEW Version !
-// : write geometry, visible fields and other settings to $HOME/.qpsrc
+// : write geometry, visible fields and other settings
 void Qps::save_settings()
 {
     if (Qps::auto_save_options)
@@ -762,19 +688,19 @@ void Qps::update_menu_status()
         {
             act->setCheckable(true);
             act->setChecked(Procview::flag_show_file_path);
-            act->setText("Show File Path");
+            act->setText( tr( "Show File Path" ) );
         }
         else if (id == MENU_INFOBAR)
         {
             act->setCheckable(true);
             act->setChecked(show_infobar);
-            act->setText("Show Graph");
+            act->setText( tr( "Show Graph" ) );
         }
         else if (id == MENU_CTRLBAR)
         {
             act->setCheckable(true);
             act->setChecked(show_ctrlbar);
-            act->setText("Show Control Bar");
+            act->setText( tr( "Show Control Bar" ) );
         }
         else if (id == MENU_STATUS)
         {
@@ -785,7 +711,7 @@ void Qps::update_menu_status()
         {
             act->setCheckable(true);
             act->setChecked(Procview::flag_cumulative);
-            act->setText("Include Child Times");
+            act->setText( tr( "Include Child Times" ) );
         }
     }
 }
@@ -871,7 +797,8 @@ void Qps::menu_custom()
     if (field_win)
     {
         field_win->show();
-        field_win->raise();
+        if (!under_wayland)
+            field_win->raise();
     }
     else
     {
@@ -884,10 +811,6 @@ void Qps::menu_custom()
     }
 }
 
-// MOVE TO PSTABlE ? hmmm wait...
-// Interface for  reading_setting()
-// SLOT:
-//
 // called by
 // 	1.click Tree_checkbox
 //	2.void Qps::view_menu(int id)
@@ -949,91 +872,6 @@ void Qps::field_removed(int index)
 
     pstable->refresh();
     context_col = -1;
-}
-
-// moveto command?
-void Qps::menu_edit_cmd()
-{
-    if (command_win)
-    {
-        command_win->show();
-        command_win->raise();
-    }
-    else
-    {
-        command_win = new CommandDialog();
-        command_win->show();
-        connect(command_win, SIGNAL(command_change()),
-                SLOT(make_command_menu()));
-    }
-}
-
-// init command menu
-// callback by CommandDialog::add_new()
-void Qps::make_command_menu()
-{
-    // should clear SIGNAL!!!
-    QAction *act;
-    m_command->clear();
-    m_command->disconnect();
-
-    if (flag_devel)
-    {
-        m_command->addAction( tr( "WatchDog" ), watchdogDialog,
-                             SLOT(show()));
-        act = m_command->addAction( tr( "Edit Commands..." ), this,
-                                   SLOT(menu_edit_cmd()));
-    }
-
-    add_default_command();
-
-    for (int i = 0; i < commands.size(); i++)
-    {
-        act = m_command->addAction(commands[i]->name);
-    }
-    connect(m_command, SIGNAL(triggered(QAction *)),
-            SLOT(run_command(QAction *)));
-
-    //#ifdef SOLARIS
-    /* Solaris CDE don't have a tray, so we need a method to terminate */
-    m_command->addSeparator();
-    m_command->addAction(QIcon::fromTheme(QStringLiteral("application-exit"))
-                        , tr( "Quit" )
-                        , this
-                        , SLOT(save_quit())
-                        , Qt::ALT + Qt::Key_Q);
-    //#endif
-}
-
-// run by MENU_ID ? qt slot?
-// void Qps::run_command(int command_id)
-void Qps::run_command(QAction *act)
-{
-    int i, idx = -1;
-    // FUNC_START
-
-    AddLog(act->text());
-
-    // find_command
-    for (i = 0; i < commands.size(); i++)
-    {
-        if (commands[i]->name == act->text())
-        {
-            if (commands[idx]->IsNeedProc() == false)
-            {
-                commands[idx]->call(nullptr);
-                return;
-            }
-
-            for (int i = 0; i < procview->linear_procs.size(); i++)
-            {
-                Procinfo *p = procview->linear_procs[i];
-                if (p->selected)
-                    commands[idx]->call(p);
-            }
-            break;
-        }
-    }
 }
 
 // detail
@@ -1181,8 +1019,8 @@ void Qps::context_heading_menu(QPoint p, int col)
             QAction *act = m_fields->addAction(cat->name);
             act->setData(cat->id); // index==key
         }
-        connect(m_fields, SIGNAL(triggered(QAction *)), this,
-                SLOT(add_fields_menu(QAction *)));
+        connect(m_fields, &QMenu::triggered, this,
+                &Qps::add_fields_menu);
         init = 1;
     }
 
@@ -1236,7 +1074,6 @@ void Qps::menu_update()
         txt = QString::asprintf("%d ms", update_period);
     IntervalDialog id(txt.toUtf8().data(), update_period != eternity);
     id.exec();
-    /// save_settings();
     return;
 }
 
@@ -1274,15 +1111,17 @@ void Qps::menu_prefs()
     if (prefs_win)
     {
         prefs_win->show();
-        prefs_win->raise();
+        if (!under_wayland)
+            prefs_win->raise();
     }
     else
     {
         prefs_win = new Preferences(this);
         prefs_win->show();
-        prefs_win->raise();
+        if (!under_wayland)
+            prefs_win->raise();
 
-        connect(prefs_win, SIGNAL(prefs_change()), this, SLOT(config_change()));
+        connect(prefs_win, &Preferences::prefs_change, this, &Qps::config_change);
     }
 }
 
@@ -1534,12 +1373,11 @@ static Sflagvar flagvars[] = {{"ExitOnClose", &Qps::flag_exit},
                               {"SavePos", &Qps::save_pos},
                               {"TabView", &Qps::flag_useTabView},
                               {"SingleCPU", &Procview::flag_pcpu_single},
-                              {"devel", &flag_devel},
                               {"cmdpath", &Procview::flag_show_file_path},
                               {"infobar", &Qps::show_infobar},
                               {"ctrlbar", &Qps::show_ctrlbar},
                               {"statbar", &Qps::show_statusbar},
-                              {"autosave", &Qps::auto_save_options},
+                              //{"autosave", &Qps::auto_save_options}, // Always ave settings
                               {"cpubar", &Qps::show_cpu_bar},
                               {"loadgraph", &Qps::show_load_graph},
                               {"loadicon", &Qps::load_in_icon},
@@ -1637,25 +1475,6 @@ bool Qps::read_settings()
     procview->viewproc = i;
     ctrlbar->view->setCurrentIndex(i); // procview->viewproc=set.value("viewproc").toInt();
 
-    int size = set.beginReadArray("watchdog");
-    for (int i = 0; i < size; i++)
-    {
-        set.setArrayIndex(i);
-        watchCond *w = new watchCond;
-        w->putstring(set.value("cat").toString());
-        watchlist.append(w);
-    }
-    set.endArray();
-    size = set.beginReadArray("commands");
-    for (int i = 0; i < size; i++)
-    {
-        set.setArrayIndex(i);
-        Command *c = new Command;
-        c->putString(set.value("cmd").toString());
-        commands.append(c);
-    }
-    set.endArray();
-
     return true;
 }
 
@@ -1670,15 +1489,18 @@ void Qps::write_settings() // save setting
     set.beginGroup("geometry");
     set.setValue("width", geometry().width());
     set.setValue("height", geometry().height());
-    if (isVisible())
+    if (!under_wayland)
     {
-        set.setValue("x", geometry().x());
-        set.setValue("y", geometry().y());
-    }
-    else
-    {
-        set.setValue("x", winPos.x());
-        set.setValue("y", winPos.y());
+        if (isVisible())
+        {
+            set.setValue("x", geometry().x());
+            set.setValue("y", geometry().y());
+        }
+        else
+        {
+            set.setValue("x", winPos.x());
+            set.setValue("y", winPos.y());
+        }
     }
     set.endGroup();
 
@@ -1708,22 +1530,6 @@ void Qps::write_settings() // save setting
     set.setValue("font", QApplication::font().toString());
 
     set.setValue("interval", update_period);
-
-    set.beginWriteArray("watchdog");
-    for (int i = 0; i < watchlist.size(); i++)
-    {
-        set.setArrayIndex(i);
-        set.setValue("cat", watchlist[i]->getstring());
-    }
-    set.endArray();
-
-    set.beginWriteArray("commands");
-    for (int i = 0; i < commands.size(); i++)
-    {
-        set.setArrayIndex(i);
-        set.setValue("cmd", commands[i]->getString());
-    }
-    set.endArray();
 }
 
 // return host name with domain stripped
@@ -1757,27 +1563,6 @@ void print_help(char * /*cmdname*/)
                     "  -mini     \t\tstart Minimized\n");
 }
 
-/// #include	<QX11Info>
-QByteArray geo;
-void Qps::clicked_trayicon()
-{
-    if (isMinimized() or (isVisible() == false)) // if hidden
-    {
-        showNormal();
-        return;
-    }
-
-    if (isActiveWindow() == false) // if lower than other windows
-    {
-        raise();
-        activateWindow();
-        return;
-    }
-    winPos.setX(geometry().x());
-    winPos.setY(geometry().y());
-    hide();
-}
-
 void Qps::clicked_trayicon(QSystemTrayIcon::ActivationReason r)
 {
     if (r == QSystemTrayIcon::Trigger)
@@ -1790,11 +1575,8 @@ void Qps::clicked_trayicon(QSystemTrayIcon::ActivationReason r)
         }
         else
         {
-            showNormal();
+            showWindow();
         }
-    }
-    if (r == QSystemTrayIcon::Context)
-    {
     }
 }
 
@@ -1830,11 +1612,9 @@ int main(int argc, char **argv, char **envp)
             flag_start_mini = true;
         }
     }
-    //	codec = QTextCodec::codecForLocale(); // for Local locale
     check_system_requirement(); // check kernel version.. etc in proc.cpp
 
     QpsApp app(argc, argv);
-    app.setAttribute(Qt::AA_UseHighDpiPixmaps, true);
 
     init_misc(nullptr); // init misc, some test code runs ...
     qps = new Qps();
@@ -1850,38 +1630,29 @@ int main(int argc, char **argv, char **envp)
 
     // MOVETO  Systray
     QMenu *menu = new QMenu(qps);
-    /// menu->addAction( UniString("About"), qps, SLOT(about()) );
     menu->addAction( QObject::tr( "Show" )
                    , qps
-                   , SLOT( showNormal() ) );
+                   , &Qps::showWindow);
     menu->addAction( QObject::tr( "Hide" )
                    , qps
-                   , SLOT( hide() ) );
+                   , &Qps::hide);
     menu->addSeparator();
-    menu->addAction( QObject::tr( "Quit" )
+    menu->addAction( QIcon::fromTheme(QStringLiteral("application-exit"))
+                   , QObject::tr( "Quit" )
                    , qps
-                   , SLOT(save_quit())
-                   , Qt::ALT + Qt::Key_Q);
+                   , &Qps::save_quit);
 
     trayicon = new TrayIcon(QPixmap((const char **)icon_xpm /* init icon */),
                             "qps", menu);
-    QObject::connect(trayicon, SIGNAL(clicked(const QPoint &)), qps,
-                     SLOT(clicked_trayicon()));
-    QObject::connect(trayicon, SIGNAL(doubleClicked(const QPoint &)), qps,
-                     SLOT(clicked_trayicon()));
     QObject::connect(trayicon,
-                     SIGNAL(activated(QSystemTrayIcon::ActivationReason)), qps,
-                     SLOT(clicked_trayicon(QSystemTrayIcon::ActivationReason)));
+                     &QSystemTrayIcon::activated, qps,
+                     &Qps::clicked_trayicon);
 
-    trayicon->sysInstall(); // ok
+    trayicon->sysInstall();
 
     if (flag_start_mini)
     {
-        if (trayicon->hasSysTray)
-        {
-            qps->hide(); // qps->setHidden(true);
-        }
-        else
+        if (!trayicon->hasSysTray)
         {
             qps->showMinimized();
         }
@@ -1917,8 +1688,8 @@ void Qps::about()
     browser->setOpenExternalLinks(false);
     browser->setOpenLinks(false);
 
-    connect(browser, SIGNAL(anchorClicked(const QUrl &)), this,
-            SLOT(test_popup(const QUrl &)));
+    connect(browser, &QTextBrowser::anchorClicked, this,
+            &Qps::test_popup);
 
     lay->addWidget(label);
     lay->addWidget(browser);
@@ -1963,64 +1734,13 @@ void Qps::about()
 
     lay->addWidget(bbox);
 
-    connect(bbox, SIGNAL(accepted()), diag, SLOT(accept()));
+    connect(bbox, &QDialogButtonBox::accepted, diag, &QDialog::accept);
 
     diag->exec();
 }
 
-void Qps::license() // -> help()
-{
-
-    QDialog *diag = new QDialog(this);
-    diag->setWindowTitle("Quick Help");
-    // diag->setSizeGripEnabled(true) ;
-    QHBoxLayout *lay = new QHBoxLayout(diag);
-
-    QTextBrowser *browser = new QTextBrowser(diag);
-    browser->setMinimumSize(400, 200);
-
-    lay->addWidget(browser);
-
-    browser->setOpenExternalLinks(true);
-    browser->setOpenLinks(true);
-    browser->setText( tr( "<H1>QPS Help</H1>"
-                          "Updated: May 24 2005<BR>"
-                          "<A "
-                          "HREF=\"http://kldp.net/projects/qps\">http://kldp.net/projects/"
-                          "qps</"
-                          "A><HR>"
-
-                          "<table style=\"text-align: center; width: 100%;\" border=\"1\""
-                          " cellpadding=\"1\" cellspacing=\"0\">"
-                          "  <tbody>"
-                          "    <tr>"
-                          "      <td"
-                          " style=\"vertical-align: top; background-color: rgb(204, 204, "
-                          "204);\">Quit"
-                          "      </td>"
-                          "      <td >&nbsp; CTRL + q , CTRL + x"
-                          "      </td>"
-                          "    </tr>"
-                          "    <tr>"
-                          "      <td"
-                          " style=\"vertical-align: top; background-color: rgb(204, 204, "
-                          "204);\">Update"
-                          "      </td>"
-                          "      <td>&nbsp;Space , Enter "
-                          "      </td>"
-                          "    </tr>"
-                          "    <tr><td> process Terminate </td>  <td> ALT + T , DELETE </td> "
-                          "</tr>"
-                          "    <tr><td> process Kill </td>  <td> ALT + K  </td> </tr>"
-                          "  </tbody>"
-                          "</table>" ) );
-    diag->exec();
-}
-
-// MOVETO qps::keyPressEvent()
 void SearchBox::keyPressEvent(QKeyEvent *e)
 {
-    // signals
     if (e->key() == Qt::Key_Delete)
     {
         qps->sig_term();
@@ -2042,23 +1762,28 @@ void SearchBox::keyPressEvent(QKeyEvent *e)
 
     if (e->key() == Qt::Key_Escape)
     {
-        clear();
         qps->pstable->clearAllSelections();
+        clear();
+        return; // the rest is done at SearchBox::onTextChanged()
     }
-    else if (e->modifiers() == Qt::ControlModifier && e->key() == Qt::Key_A)
+
+    if (e->modifiers() == Qt::ControlModifier && e->key() == Qt::Key_A)
         qps->pstable->selectAll();
     else
         QLineEdit::keyPressEvent(e);
+}
 
-    qps->procview->filterstr = text();
-    qps->pstable->refresh(); /// qps->refresh(); // better ?
+// Covers pasting of selection clipboard too
+void SearchBox::onTextChanged(const QString &txt)
+{
+    qps->procview->filterstr = txt;
+    qps->pstable->refresh();
 }
 
 void SearchBox::onClearButtonClicked()
 {
     qps->pstable->clearAllSelections();
-    qps->procview->filterstr = text();
-    qps->pstable->refresh();
+    // the rest is done at SearchBox::onTextChanged()
 }
 
 void STATUSBAR_COUNT_UPDATE() {}
@@ -2073,12 +1798,6 @@ void PSTABLE_SETTREEMODE(bool mode)
 {
     if (qps)
         qps->pstable->setTreeMode(mode);
-}
-
-void QPS_SHOW()
-{
-    if (qps)
-        qps->showNormal();
 }
 
 // TESTING
