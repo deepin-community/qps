@@ -27,8 +27,7 @@
 
 extern SearchBox *search_box;
 extern bool flag_show_thread;
-extern int flag_thread_ok;
-extern bool flag_devel;
+extern bool flag_thread_ok;
 
 #include "../icon/x1.xpm"
 #include "../icon/x2.xpm"
@@ -159,7 +158,7 @@ int mini_sscanf(const char *s1, const char *fmt, ...)
             }
             else if (fmt[1] == 'u')
             {
-                k += sscanf(s, "%u%n", va_arg(va, int *), &n);
+                k += sscanf(s, "%u%n", va_arg(va, unsigned int *), &n);
                 s += n;
                 fmt += 2;
             }
@@ -171,7 +170,7 @@ int mini_sscanf(const char *s1, const char *fmt, ...)
             }
             else if (fmt[1] == 'l' && fmt[2] == 'u')
             {
-                k += sscanf(s, "%lu%n", va_arg(va, long *), &n);
+                k += sscanf(s, "%lu%n", va_arg(va, unsigned long *), &n);
                 s += n;
                 fmt += 3;
             }
@@ -206,10 +205,6 @@ int mini_sscanf(const char *s1, const char *fmt, ...)
                 p = strstr(s, sstr);
                 if (p == nullptr)
                 {
-                    if (false and flag_devel)
-                        printf("%s : can't found [%s] "
-                               "in %s\n",
-                               __FUNCTION__, sstr, s);
                     break;
                 }
                 s = p + n;
@@ -271,10 +266,10 @@ int fsize(char *fname)
 void msleep(long msec)
 {
 #ifdef LINUX
-    timespec req;
+    // timespec req;
     timeval tv;
-    req.tv_sec = 0;
-    req.tv_nsec = msec * 1000000;
+    // req.tv_sec = 0;
+    // req.tv_nsec = msec * 1000000;
     // int  	nanosleep(const struct timespec *req, struct timespec
     // *remain)
     /*while (nanosleep(&req, &req))
@@ -290,31 +285,32 @@ void msleep(long msec)
 #endif
 }
 
-void mem_string_k(int kbytes, char *buf)
+void mem_string_k(unsigned long kbytes, char *buf)
 {
     if (kbytes >= 1024)
     {
-        int mb = kbytes >> 10;
+        auto mb = kbytes >> 10;
         if (mb >= 1024 * 100)
-            sprintf(buf, "%uGB", mb >> 10);
+            sprintf(buf, "%luGB", mb >> 10);
         else
-            sprintf(buf, "%uMB", mb);
+            sprintf(buf, "%luMB", mb);
     }
     else
-        sprintf(buf, "%uKB", kbytes);
+        sprintf(buf, "%luKB", kbytes);
 }
+
 void mem_string(int kbytes, char *buf)
 {
     if (kbytes >= 1024)
     {
-        int meg = kbytes >> 10;
-        if (meg >= 1024 * 100)
-            sprintf(buf, "%uGb", meg >> 10);
+        auto meg = kbytes / 1024.0;
+        if (meg >= 1024.0)
+            sprintf(buf, "%.2f GiB", meg / 1024.0);
         else
-            sprintf(buf, "%uMb", meg);
+            sprintf(buf, "%.0f MiB", meg);
     }
     else
-        sprintf(buf, "%uKb", kbytes);
+        sprintf(buf, "%u KiB", kbytes);
 }
 
 // DEL
@@ -353,7 +349,7 @@ TBloon::TBloon(QWidget *parent) : QLabel(parent)
     // Construct a 1-second timeline with a frame range of 0 - 100
     timeLine = new QTimeLine(100000, this);
     timeLine->setFrameRange(0, 20000);
-    timeLine->setCurveShape(QTimeLine::EaseOutCurve);
+    timeLine->easingCurve();
     //	timeLine->set(0, 20000);
     connect(timeLine, SIGNAL(frameChanged(int)), this, SLOT(update(int)));
 }
@@ -421,61 +417,18 @@ void TBloon::paintEvent(  QPaintEvent * event )
 } */
 
 TFrame::TFrame(QWidget *parent) : QLabel(parent)
-// TFrame::TFrame(QWidget *parent):QFrame(parent)
 {
-    text = tr( "this is Tframe widget" );
-    // setAutoFillBackground(false);
-    // setGeometry(50,50,100,100);
-    // setAttribute(Qt::WA_OpaquePaintEvent);
-    // setFrameShape(QFrame::StyledPanel);
-    // setFrameShadow(QFrame::Sunken);
-    // setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Preferred);
-    // setSizePolicy(QSizePolicy::Minimum,QSizePolicy::Minimum);
-    // setSizePolicy(QSizePolicy::Maximum,QSizePolicy::Maximum);
-    // setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Expanding);
-
-    //"border-width: 1px; border-style: solid;  border-color:
-    // rgb(150,45,100);
-    // border-radius: 5px ;"
     setStyleSheet("QLabel { "
                   "border-width: 1px; border-style: solid;  border-color: "
                   "rgb(210,50,130); border-radius: 5px ;"
                   "background-color : rgba(0,0,0,69%); padding: 3px; color: "
                   "rgb(0,255,150); }");
-    // 	setStyleSheet(  "QLabel { " "border-width: 1px; border-style:
-    // solid;
-    // border-radius: 5px ; padding: 3px; }");
     hide();
-
-    timeLine = new QTimeLine(2000, this);
-    timeLine->setFrameRange(0, 100);
-    connect(timeLine, SIGNAL(frameChanged(int)), this, SLOT(setValue(int)));
 }
-
-/*
-void TFrame::showText(QPoint glob_pos,QString str)
-{
-
-
-}
-
-
-void TFrame::move(int x,int y)
-{
-
-
-} */
-
-// QToolTip::showText(e->globalPos(), s);
-void TFrame::showText(QPoint /*glob_pos*/, QString /*str*/) {}
 
 void TFrame::setText(QString str)
 {
-    text = str;
-
     QLabel::setText(str);
-
-    // resize(minimumSizeHint());
     resize(sizeHint()); // **** before show !!  *****
 
     if (str.size() == 0)
@@ -486,110 +439,27 @@ void TFrame::setText(QString str)
     show();
 }
 
-// to avoid ~
-void TFrame::draw(QPainter &p)
-{
-    //	if(!isVisible()) 	return;
-    return;
-    int h = fontMetrics().height() + 3;
-    int w = fontMetrics().width(text) + 9;
-    setFixedSize(w, h);
-    //	QFont font("Adobe Helvetica"); // helvetica & No-Antialias
-    // 	font.setPixelSize(10);
-    //	setFont(font);
-    //	p.drawRoundRect(rect(),10,10);
-    //	p.fillRect ( cr,QColor(0,0,0));
-    QColor bg = QColor(0, 0, 0, 120);
-#if QT_VERSION < 0x040400
-    p.fillRect(rect(), QColor(0, 0, 0, 120));
-#else
-    // p.fillRect(rect(),QColor(0,0,0,90));
-
-    //	p.setPen(QColor(0,255,155)); // less visually obtrusive than
-    // black
-    //	p.setBrush(QBrush(bg));
-    //	p.drawRoundedRect(0,0,w,h, 4, 4);
-    p.fillRect(rect(), bg);
-
-#endif
-
-    p.setPen(QColor(0, 255, 155)); // less visually obtrusive than black
-    p.drawText(0, 0, w, h, Qt::AlignVCenter | Qt::AlignHCenter, text);
-}
-
 void TFrame::setPos()
 {
-    QWidget *parent = QWidget::parentWidget();
-
-    QPoint p = parent->mapFromGlobal(QCursor::pos());
-
-    setPos(p.x(), p.y());
+    if (QWidget *parent = parentWidget())
+    {
+        QPoint p = parent->mapFromGlobal(QCursor::pos());
+        setPos(p.x(), p.y());
+    }
 }
 
 void TFrame::setPos(int x, int y)
 {
-    QWidget *parent = QWidget::parentWidget();
-    int pwidth = parent->width();
-
-    if (width() + x > pwidth)
+    if (QWidget *parent = parentWidget())
     {
-        x = pwidth - width();
+        x += 16;
+        int pwidth = parent->width();
+        if (width() + x > pwidth)
+        {
+            x = pwidth - width();
+        }
+        move(x, y + 4);
     }
-    move(x + 16, y + 4);
-}
-
-void TFrame::moveEvent(QMoveEvent * /*e*/)
-{
-    // int x=e->pos().x();
-    // printf("pos (%d %d) \n",e->pos().x(),e->pos().y());
-    // event->oldPos();
-}
-
-void TFrame::setValue(int val)
-{
-    opacity += ((float)val / 100);
-    update();
-}
-
-void TFrame::showEvent(QShowEvent * /*event*/)
-{
-    opacity = 0.2;
-    //	timeLine->start();
-}
-
-// Maybe SEGFAULT
-void setPaletteBlend(QPalette &p)
-{
-    for (int i = 0; i < (QPalette::NoRole); i++)
-    {
-        QColor c = p.color(QPalette::ColorRole(i));
-        c.alpha();
-    }
-}
-
-void TFrame::paintEvent(QPaintEvent *event)
-{
-    QLabel::paintEvent(event);
-    return;
-
-    QCursor::pos();
-    //	if(x()+width() >  ) ;
-    QPalette np = palette();
-    setPaletteBlend(np);
-
-    QPainter p(this); // why?
-
-    //	if(opacity>1) timeLine->stop(); //
-    //	p.setOpacity(opacity);
-    //	p.setOpacity(0.01);
-    //	setWindowOpacity (0.1 );
-    //	QFrame::paintEvent(event);
-    //    p.scale(0.5,0.5);
-
-    // draw(p);
-    // p.setBackgroundMode (Qt::TransparentMode);
-    // p.setRenderHint(QPainter::Antialiasing);
-    // painter.translate(width() / 2, height() / 2);
 }
 
 UFrame::UFrame(QWidget *parent) : QFrame(parent)
@@ -637,63 +507,15 @@ void UFrame::setTitle(QString str)
 void UFrame::paintEvent(QPaintEvent * /*event*/) {}
 
 QPixmap *letters;
-int pf_height = 9;
-int pf_width = 6;
+int pf_height = 12;
+int pf_width = 8;
 
 void init_xpm()
 {
     letters = new QPixmap(":/icon/letters.png");
-    pf_height = 9;
-    pf_width = 6;
+    pf_height = 12;
+    pf_width = 8;
 }
-
-#ifdef LINUX
-#include <sys/prctl.h>
-#include <QThread>
-char strong_buff[128];
-class MyThread : public QThread
-{
-  public:
-    void run() override
-    {
-        prctl(PR_SET_NAME, "thread_test123456789");
-
-        while (true)
-        {
-            for (int i = 0; i < 20000; i++)
-            {
-                int p = rand() % 120;
-                strong_buff[p] = p;
-            }
-            msleep(40);
-        }
-        exec();
-    }
-};
-class MyThread2 : public QThread
-{
-  public:
-    void run() override
-    {
-        prctl(PR_SET_NAME, "thread_test987654321");
-
-        while (true)
-        {
-            int m = 0;
-            int i;
-            for (i = 0; i < 100000; i++)
-            {
-                int p = rand() % 120;
-                // strong_buff[p]=p;
-                m = i * p;
-            }
-            m += i;
-            msleep(60);
-        }
-        exec();
-    }
-};
-#endif
 
 int pf_str_width(char *str)
 {
@@ -702,6 +524,7 @@ int pf_str_width(char *str)
     return len;
 }
 int pf_char_height() { return pf_height; }
+int pf_char_width() { return pf_width; }
 
 int pf_write(QPainter *p, int x, int y, const char *str)
 {
@@ -769,6 +592,8 @@ SearchBox::SearchBox(QWidget *parent) : QLineEdit(parent)
 
     setFocus(Qt::ActiveWindowFocusReason);
 
+    connect (this, &QLineEdit::textChanged, this, &SearchBox::onTextChanged);
+
     QList<QToolButton*> list = findChildren<QToolButton*>();
     if (!list.isEmpty())
     {
@@ -776,14 +601,6 @@ SearchBox::SearchBox(QWidget *parent) : QLineEdit(parent)
         if (clearButton)
             connect (clearButton, &QAbstractButton::clicked, this, &SearchBox::onClearButtonClicked);
     }
-}
-
-void SearchBox::event_cursor_moved(QMouseEvent *e) { move(e->x(), e->y()); }
-
-void SearchBox::event_xbutton_clicked()
-{
-    QKeyEvent ke(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier); // temp..
-    keyPressEvent(&ke);
 }
 
 LogBox::LogBox(QWidget *p) : QLabel(p)
@@ -812,7 +629,7 @@ ControlBar::ControlBar(QWidget *parent) : QFrame(parent)
     setFrameStyle(QFrame::NoFrame);
     layout = new QHBoxLayout(this);
     layout->addSpacing(4); // left gap
-    layout->setMargin(0);
+    layout->setContentsMargins(0, 0, 0, 0);
 
     b_linear = new QRadioButton(tr( "Linear" ), this);
     b_linear->setFocusPolicy(Qt::NoFocus);
@@ -821,14 +638,14 @@ ControlBar::ControlBar(QWidget *parent) : QFrame(parent)
     b_tree->setFocusPolicy(Qt::NoFocus);
 
     search_box = new SearchBox(this);
-    connect(b_linear, SIGNAL(clicked()), SLOT(linear_clicked()));
-    connect(b_tree, SIGNAL(clicked()), SLOT(tree_clicked()));
+    connect(b_linear, &QAbstractButton::clicked, this, &ControlBar::linear_clicked);
+    connect(b_tree, &QAbstractButton::clicked, this, &ControlBar::tree_clicked);
 
     if (flag_thread_ok)
     {
-        check_thread = new QCheckBox( ( "Thread" ), this);
+        check_thread = new QCheckBox( ( tr( "Thread" ) ), this);
         check_thread->setFocusPolicy(Qt::NoFocus);
-        connect(check_thread, SIGNAL(clicked()), SLOT(show_thread_clicked()));
+        connect(check_thread, &QAbstractButton::clicked, this, &ControlBar::show_thread_clicked);
         check_thread->setChecked(flag_show_thread);
     }
 
@@ -855,7 +672,7 @@ ControlBar::ControlBar(QWidget *parent) : QFrame(parent)
     pauseButton->setToolTip(tr("Pause (Ctrl+Space)"));
     pauseButton->setFocusPolicy(Qt::NoFocus);
     pauseButton->setAutoRaise(true);
-    connect(pauseButton, SIGNAL(clicked(bool)), SLOT(setPaused(bool)));
+    connect(pauseButton, &QAbstractButton::clicked, this, &ControlBar::setPaused);
 
     layout->addWidget(pauseButton);
 
@@ -901,27 +718,11 @@ void ControlBar::show_thread_clicked()
     emit need_refresh();
 }
 
-void ServerAdaptor::accelerate() {}
-
 char *read_proc_file(const char *fname, int pid = -1, int tgid = -1); // Temp
 void init_misc(QWidget * /*main*/)
 {
 
     init_xpm(); // xpm image file load
-
-    if (true) // TESTING
-    {
-    }
-
-#ifdef LINUX
-    if (false or flag_devel) // thread's Name Change test
-    {
-        QThread *task = new MyThread();
-        task->start();
-        task = new MyThread2();
-        task->start();
-    }
-#endif
 
     if (false) // test mini_sscanf()
     {
@@ -956,7 +757,5 @@ void QTabWidgetX::showTab(bool flag)
     else
         tb->hide();
 // if flag_useTabView == false
-#if QT_VERSION > 0x040500
 //	setDocumentMode (true); // QT 4.5
-#endif
 }

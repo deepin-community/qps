@@ -25,7 +25,6 @@
 #define MISC_H
 
 #include <QtCore/QObject>
-#include <QtDBus/QtDBus>
 #include <QAbstractButton>
 #include <QCheckBox>
 #include <QRadioButton>
@@ -58,13 +57,14 @@ void setQpsTheme();
 int fsize(char *fname);
 void msleep(long msec);
 void mem_string(int kbytes, char *buf);
-void mem_string_k(int kbytes, char *buf);
+void mem_string_k(unsigned long kbytes, char *buf);
 
 void init_xpm();
 void init_misc(QWidget *main);
 int pf_write(QPainter *p, int x, int y, const char *str);
 int pf_str_width(char *str);
 int pf_char_height();
+int pf_char_width();
 void check_qps_running();
 
 int QPS_PROCVIEW_CPU_NUM();
@@ -91,27 +91,8 @@ class TFrame : public QLabel
   public:
     TFrame(QWidget *parent);
     void setText(QString str);
-    void draw(QPainter &p);
-    void showText(QPoint pos, QString str);
     void setPos(int x, int y);
     void setPos();
-
-  protected slots:
-    //    		void refresh();
-    //  		void update(int n);
-    //		QToolButton *button,*button2,*button3;
-    //		void event_cursor_moved(QMouseEvent *e);
-    void setValue(int val);
-
-  protected:
-    void paintEvent(QPaintEvent *event) override;
-    void moveEvent(QMoveEvent *event) override;
-    void showEvent(QShowEvent *event) override;
-
-  private:
-    QString text;
-    QTimeLine *timeLine;
-    float opacity;
 };
 
 class TBloon : public QLabel
@@ -179,11 +160,10 @@ class SearchBox : public QLineEdit
     Q_OBJECT
   public:
     SearchBox(QWidget *parent);
-    void event_cursor_moved(QMouseEvent *e);
     void keyPressEvent(QKeyEvent *e) override;
   protected slots:
     void onClearButtonClicked();
-    void event_xbutton_clicked();
+    void onTextChanged(const QString &txt);
 };
 
 class LogBox : public QLabel
@@ -238,33 +218,6 @@ class QTabWidgetX : public QTabWidget
   public:
     QTabWidgetX(QWidget *parent);
     void showTab(bool);
-};
-
-// class ServerAdaptor: public QDBusAbstractAdaptor
-class ServerAdaptor : public QObject
-{
-    Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "com.trolltech.Examples.CarInterface")
-    Q_CLASSINFO("D-Bus Introspection",
-                ""
-                "  <interface name=\"com.trolltech.Examples.CarInterface\" >\n"
-                "    <method name=\"accelerate\" />\n"
-                "    <method name=\"decelerate\" />\n"
-                "    <method name=\"turnLeft\" />\n"
-                "    <method name=\"turnRight\" />\n"
-                "    <signal name=\"crashed\" />\n"
-                "  </interface>\n"
-                "")
-  public:
-    //    ServerAdaptor(QObject *parent);
-    ServerAdaptor(){};
-    ~ServerAdaptor() override{};
-
-  public:         // PROPERTIES
-  public Q_SLOTS: // METHODS
-    void accelerate();
-Q_SIGNALS: // SIGNALS
-    void crashed();
 };
 
 #endif // MISC_H

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.0 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.18.0 FATAL_ERROR)
 # CMP0000: Call the cmake_minimum_required() command at the beginning of the top-level
 # CMakeLists.txt file even before calling the project() command.
 # The cmake_minimum_required(VERSION) command implicitly invokes the cmake_policy(VERSION)
@@ -9,7 +9,7 @@ Project(qps)
 option(UPDATE_TRANSLATIONS "Update source translation translations/*.ts files" OFF)
 
 set(MAJOR_VERSION 2)
-set(MINOR_VERSION 2)
+set(MINOR_VERSION 10)
 set(PATCH_VERSION 0)
 set(QPS_VERSION_STRING ${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION})
 add_definitions(
@@ -17,20 +17,20 @@ add_definitions(
 )
 
 # Minimum Versions
-set(LXQTBT_MINIMUM_VERSION "0.8.0")
-set(LXQT_MINIMUM_VERSION "0.16.0")
-set(QT_MINIMUM_VERSION "5.12.0")
+set(LXQTBT_MINIMUM_VERSION "2.1.0")
+set(LXQT_MINIMUM_VERSION "2.1.0")
+set(QT_MINIMUM_VERSION "6.6.0")
 
 find_package(lxqt ${LXQT_MINIMUM_VERSION} REQUIRED)
-find_package(Qt5 ${QT_MINIMUM_VERSION} REQUIRED COMPONENTS Widgets X11Extras DBus LinguistTools)
-find_package(lxqt-build-tools ${LXQTBT_MINIMUM_VERSION} REQUIRED)
+find_package(Qt6 ${QT_MINIMUM_VERSION} REQUIRED COMPONENTS Widgets LinguistTools)
+find_package(lxqt2-build-tools ${LXQTBT_MINIMUM_VERSION} REQUIRED)
 
 include(GNUInstallDirs)
 include(LXQtPreventInSourceBuilds)
 include(LXQtCompilerSettings NO_POLICY_SCOPE)
 include(LXQtTranslateTs)
 include(LXQtTranslateDesktop)
-include(Qt5TranslationLoader)
+include(Qt6TranslationLoader)
 
 # LXQtCompilerSettings adds them but qps still uses implicit string casts
 remove_definitions(
@@ -61,3 +61,6 @@ install(FILES
     icon/qps.png
     DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/48x48/apps"
 )
+# install the
+install(FILES org.lxqt.Qps.appdata.xml
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo")
